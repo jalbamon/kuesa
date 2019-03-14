@@ -159,6 +159,8 @@ QString channelPathToName(const QString &path)
         return QStringLiteral("Rotation");
     if (path == QStringLiteral("scale"))
         return QStringLiteral("Scale3D");
+    if (path == QStringLiteral("weights"))
+        return QStringLiteral("MorphWeights");
     return {};
 }
 
@@ -170,6 +172,8 @@ QString channelPathToProperty(const QString &path)
         return QStringLiteral("rotation");
     if (path == QStringLiteral("scale"))
         return QStringLiteral("scale3D");
+    if (path == QStringLiteral("weights"))
+        return QStringLiteral("morphWeights");
     return {};
 }
 
@@ -235,7 +239,8 @@ std::tuple<int, std::vector<float>> AnimationParser::animationChannelDataFromDat
 }
 
 Qt3DAnimation::QChannel AnimationParser::animationChannelDataFromBuffer(const QString &channelName,
-                                                                        const AnimationParser::AnimationSampler &sampler) const
+                                                                        const AnimationParser::AnimationSampler &sampler,
+                                                                        const TreeNode &targetNode) const
 {
     auto channel = Qt3DAnimation::QChannel(channelPathToName(channelName));
     const Accessor inputAccessor = m_context->accessor(sampler.inputAccessor);
@@ -276,6 +281,22 @@ Qt3DAnimation::QChannel AnimationParser::animationChannelDataFromBuffer(const QS
 
     if (nbComponents == 0 || valueStamps.empty())
         return channel;
+
+    // When dealing with morph targets we should have
+    // nbComponents * morphTargetCount * timeStamps.size() keyframe values
+    // nbComponents is 1 because we are dealing with a scalar weight type
+    // but the channel should actually expose one scalar weight for each morph targets
+    // -> one channel component for each morph target in the mesh
+    // 1 - n possibly
+    const bool isMorphTargetWeightChannel = (channelName == QStringLiteral("weights"));
+    if (isMorphTargetWeightChannel) {
+        const Mesh morphTargetMesh = m_context->mesh(targetNode.meshIdx);
+        if (targetNode.meshIdx < 0 || morphTargetMesh.morphTargetCount == 0) {
+            qWarning(kuesa) << "Invalid Mesh for MorphTarget animation";
+            return channel;
+        }
+        nbComponents = morphTargetMesh.morphTargetCount;
+    }
 
     Qt3DAnimation::QKeyFrame::InterpolationType interpolationType = Qt3DAnimation::QKeyFrame::LinearInterpolation;
 
@@ -455,11 +476,12 @@ AnimationParser::channelFromJson(const QJsonObject &channelObject) const
     const QJsonValue samplerValue = channelObject.value(KEY_SAMPLER);
     const QJsonObject targetObject = channelObject.value(KEY_TARGET).toObject();
     const QString path = targetObject.value(KEY_PATH).toString();
-    const int targetNode = targetObject.value(KEY_NODE).toInt();
+    const int targetNodeIdx = targetObject.value(KEY_NODE).toInt(-1);
     const AnimationSampler sampler = m_samplers.at(samplerValue.toInt());
+    const TreeNode targetNode = m_context->treeNode(targetNodeIdx);
 
-    channel = animationChannelDataFromBuffer(path, sampler);
-    channel.setName(channel.name() + QStringLiteral("_") + QString::number(targetNode));
+    channel = animationChannelDataFromBuffer(path, sampler, targetNode);
+    channel.setName(channel.name() + QStringLiteral("_") + QString::number(targetNodeIdx));
 
     if (channel.channelComponentCount() == 0) {
         qCWarning(kuesa, "Channel doesn't have components");
@@ -474,11 +496,6 @@ AnimationParser::mappingFromJson(const QJsonObject &channelObject) const
 {
     const QJsonObject targetObject = channelObject.value(KEY_TARGET).toObject();
     const QString path = targetObject.value(KEY_PATH).toString();
-
-    // TODO If we find a weight mapper, return a default constructed mapping
-    // Qt3D doesn't support morph targets yet
-    if (path == QStringLiteral("weights"))
-        return std::make_tuple(true, ChannelMapping());
 
     const QJsonValue nodeValue = targetObject.value(KEY_NODE);
     ChannelMapping mapping;
@@ -582,13 +599,6 @@ bool AnimationParser::parse(const QJsonArray &animationsArray, GLTF2Context *con
                 qCWarning(kuesa, "An animation mapping is incorrect");
                 return false;
             }
-
-            // TODO Weights mappings are default constructed.
-            // Detect them with the targetNodeId default value and discard them so we don't try to play them
-            // Qt3D doesn't support morph targets yet
-            if (mapping.targetNodeId == -1)
-                continue;
-
             animation.mappings.push_back(mapping);
         }
 
