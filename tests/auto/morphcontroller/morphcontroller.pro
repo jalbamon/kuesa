@@ -1,9 +1,9 @@
-# auto.pro
+# morphcontroller.pro
 #
 # This file is part of Kuesa.
 #
-# Copyright (C) 2018 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
-# Author: Mike Krus <mike.krus@kdab.com>
+# Copyright (C) 2019 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
+# Author: Paul Lemire <paul.lemire@kdab.com>
 #
 # Licensees holding valid proprietary KDAB Kuesa licenses may use this file in
 # accordance with the Kuesa Enterprise License Agreement provided with the Software in the
@@ -24,43 +24,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-TEMPLATE = subdirs
+TEMPLATE = app
 
-SUBDIRS = \
-#    cmake \
-    assetcollection \
-    meshcollection \
-    texturecollection \
-    skeletoncollection \
-    animationclipcollection \
-    effectcollection \
-    sceneentity \
-    textureimagecollection \
-    assetpipelineeditor \
-    morphcontroller
+TARGET = tst_morphcontroller
 
-#installed_cmake.depends = cmake
+QT += testlib kuesa kuesa-private
 
-qtConfig(private_tests) {
-    SUBDIRS += \
-        bufferparser \
-        bufferviewparser \
-        bufferaccessorparser \
-        cameraparser \
-        meshparser \
-        nodeparser \
-        gltfparser \
-        gltfexporter \
-        layerparser \
-        imageparser \
-        texturesamplerparser \
-        textureparser \
-        animationparser \
-        sceneparser \
-        materialparser \
-        skinparser \
-        postfxlistextension \
-        assetitem \
-        forwardrenderer \
-        uri
-}
+CONFIG += testcase
+
+SOURCES += tst_morphcontroller.cpp
+

@@ -31,7 +31,8 @@ SOURCES += \
     $$PWD/metallicroughnesseffect.cpp \
     $$PWD/metallicroughnessmaterial.cpp \
     $$PWD/animationplayer.cpp \
-    $$PWD/skybox.cpp
+    $$PWD/skybox.cpp \
+    $$PWD/morphcontroller.cpp
 
 HEADERS += \
     $$PWD/sceneentity.h \
@@ -43,7 +44,8 @@ HEADERS += \
     $$PWD/metallicroughnesseffect.h \
     $$PWD/metallicroughnessmaterial.h \
     $$PWD/animationplayer.h \
-    $$PWD/skybox.h
+    $$PWD/skybox.h \
+    $$PWD/morphcontroller.h
 
 qtConfig(draco) {
     HEADERS += $$PWD/draco_prefix_p.h
