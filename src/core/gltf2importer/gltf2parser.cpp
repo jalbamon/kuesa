@@ -293,6 +293,7 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString 
     Q_ASSERT(m_context);
     m_context->setJson(jsonDocument);
     m_context->setFilename(filename);
+    m_context->setBasePath(basePath);
 
     m_animators.clear();
     m_treeNodes.clear();
