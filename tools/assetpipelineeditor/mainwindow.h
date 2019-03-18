@@ -87,6 +87,7 @@ private slots:
     void openFile();
     void exportFile();
     void reloadFile();
+    void generateTangents();
     void about();
     void setCamera(int index);
     void assetSelected(const QString &assetName, Kuesa::AbstractAssetCollection *collection);
