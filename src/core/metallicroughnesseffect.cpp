@@ -28,6 +28,7 @@
 
 #include "metallicroughnesseffect.h"
 
+#include <Qt3DCore/private/qnode_p.h>
 #include <Qt3DRender/qcullface.h>
 #include <Qt3DRender/qfilterkey.h>
 #include <Qt3DRender/qgraphicsapifilter.h>
@@ -718,8 +719,25 @@ void MetallicRoughnessEffect::setToneMappingAlgorithm(MetallicRoughnessEffect::T
     emit toneMappingAlgorithmChanged(algorithm);
 }
 
+Qt3DRender::QAbstractTexture *MetallicRoughnessEffect::brdfLUT() const
+{
+    return m_brdfLUTParameter->value().value<Qt3DRender::QAbstractTexture *>();
+}
+
 void MetallicRoughnessEffect::setBrdfLUT(Qt3DRender::QAbstractTexture *brdfLUT)
 {
+    auto d = Qt3DCore::QNodePrivate::get(this);
+    auto current = this->brdfLUT();
+    if (current) {
+        d->unregisterDestructionHelper(current);
+        if (current->parent() == this)
+            delete current;
+    }
+    if (brdfLUT) {
+        d->registerDestructionHelper(brdfLUT, &MetallicRoughnessEffect::setBrdfLUT, brdfLUT);
+        if (!brdfLUT->parentNode())
+            brdfLUT->setParent(this);
+    }
     m_brdfLUTParameter->setValue(QVariant::fromValue(brdfLUT));
 }
 
