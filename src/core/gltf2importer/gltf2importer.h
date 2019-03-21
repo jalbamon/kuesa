@@ -30,6 +30,7 @@
 #define KUESA_GLTF2IMPORTER_H
 
 #include <QUrl>
+#include <QThread>
 #include <Qt3DCore/QNode>
 #include <Kuesa/kuesa_global.h>
 
@@ -92,6 +93,7 @@ private:
     Status m_status;
     Kuesa::SceneEntity *m_sceneEntity;
     QMetaObject::Connection m_sceneEntityDestructionConnection;
+    QThread m_parsingThread;
     bool m_assignNames;
 };
 

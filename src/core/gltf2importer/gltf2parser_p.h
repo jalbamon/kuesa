@@ -75,17 +75,26 @@ struct HierarchyNode {
 using KeyParserFuncPair = QPair<QLatin1String, std::function<bool(const QJsonValue &)>>;
 
 class KUESA_PRIVATE_EXPORT GLTF2Parser
+        : public QObject
 {
+    Q_OBJECT
 public:
     GLTF2Parser(SceneEntity *sceneEntity = nullptr, bool assignNames = false);
     virtual ~GLTF2Parser();
 
     virtual QVector<KeyParserFuncPair> prepareParsers();
-    Qt3DCore::QEntity *parse(const QString &filePath);
-    Qt3DCore::QEntity *parse(const QByteArray &jsonData, const QString &basePath, const QString &filename = {});
+    Q_INVOKABLE Qt3DCore::QEntity *parse(const QString &filePath);
+    void parse(const QByteArray &jsonData, const QString &basePath, const QString &filename = {});
+    Qt3DCore::QEntity *parseSynchronous(const QByteArray &jsonData, const QString &basePath, const QString &filename = {});
+    void moveToThread(QThread *targetThread);
 
     void setContext(GLTF2Context *);
     const GLTF2Context *context() const;
+
+    Qt3DCore::QEntity *setupScene();
+
+signals:
+    void parsingFinished(Qt3DCore::QEntity *);
 
 private:
     void buildEntitiesAndJointsGraph();
@@ -124,12 +133,12 @@ private:
     Qt3DCore::QEntity *scene(const int id);
 
     QString m_basePath;
-    GLTF2Context *m_context;
+    GLTF2Context *m_context = nullptr;
     QVector<TreeNode> m_treeNodes;
     QVector<Qt3DCore::QSkeleton *> m_skeletons;
     QVector<AnimationDetails> m_animators;
-    SceneEntity *m_sceneEntity;
-    Qt3DCore::QEntity *m_sceneRootEntity;
+    SceneEntity *m_sceneEntity = nullptr;
+    Qt3DCore::QEntity *m_sceneRootEntity = nullptr;
     int m_defaultSceneIdx;
     bool m_assignNames;
     QVector<QHash<int, int>> m_gltfJointIdxToSkeletonJointIdxPerSkeleton;

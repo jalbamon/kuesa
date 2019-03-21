@@ -25,7 +25,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-
+#include <iostream>
 #include <qtkuesa-config.h>
 #include "gltf2parser_p.h"
 #include "gltf2keys_p.h"
@@ -84,7 +84,9 @@ void addToCollectionWithUniqueName(CollectionType *collection, const QString &ba
             break;
         currentName = QString(QLatin1Literal("%1_%2")).arg(basename, QString::number(i));
     }
+
     collection->add(currentName, asset);
+
     if (asset->objectName().isEmpty())
         asset->setObjectName(currentName);
 }
@@ -139,8 +141,14 @@ GLTF2Parser::~GLTF2Parser()
 {
 }
 
+void msgh(QtMsgType, const QMessageLogContext &, const QString &s)
+{
+    std::cerr << s.toStdString() << std::endl;
+}
+
 Qt3DCore::QEntity *GLTF2Parser::parse(const QString &filePath)
 {
+    qInstallMessageHandler(msgh);
     QFile f(filePath);
     f.open(QIODevice::ReadOnly);
     if (!f.isOpen()) {
@@ -150,7 +158,9 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QString &filePath)
 
     QFileInfo finfo(filePath);
     const QByteArray jsonData = f.readAll();
-    return parse(jsonData, finfo.absolutePath(), finfo.fileName());
+    parse(jsonData, finfo.absolutePath(), finfo.fileName());
+    parsingFinished(nullptr);
+    return nullptr;
 }
 
 template<class T>
@@ -283,12 +293,12 @@ QVector<KeyParserFuncPair> GLTF2Parser::prepareParsers()
     };
 }
 
-Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString &basePath, const QString &filename)
+void GLTF2Parser::parse(const QByteArray &jsonData, const QString &basePath, const QString &filename)
 {
     QJsonDocument jsonDocument = QJsonDocument::fromJson(jsonData);
     if (jsonDocument.isNull() || !jsonDocument.isObject()) {
         qCWarning(kuesa()) << "File is not a valid json document";
-        return nullptr;
+        return;
     }
 
     Q_ASSERT(m_context);
@@ -336,7 +346,7 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString 
 
         if (!allRequiredAreSupported) {
             qCWarning(kuesa()) << "File contains unsupported extensions: " << unsupportedExtensions;
-            return nullptr;
+            return;
         }
     }
 
@@ -344,13 +354,13 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString 
     const bool parsingSucceeded = traverseGLTF(topLevelParsers, rootObject);
 
     if (!parsingSucceeded)
-        return nullptr;
+        return;
 
     m_defaultSceneIdx = rootObject.value(KEY_SCENE).toInt(0);
 
     if (m_defaultSceneIdx < 0 || m_defaultSceneIdx > m_context->scenesCount()) {
         qCWarning(kuesa()) << "Invalid default scene reference";
-        return nullptr;
+        return;
     }
 
     // Build vector of tree nodes
@@ -368,15 +378,58 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString 
 
     // Generate Qt3D content for animations
     generateAnimationContent();
+}
 
+Qt3DCore::QEntity *GLTF2Parser::parseSynchronous(const QByteArray &jsonData, const QString &basePath, const QString &filename)
+{
+    parse(jsonData, basePath, filename);
+    return setupScene();
+}
+
+void GLTF2Parser::moveToThread(QThread *targetThread)
+{
+    QObject::moveToThread(targetThread);
+    if (m_sceneRootEntity)
+        m_sceneRootEntity->moveToThread(targetThread);
+    for (auto &anim : m_animators) {
+        anim.clip->moveToThread(targetThread);
+        anim.mapper->moveToThread(targetThread);
+    }
+
+    for (int i = 0, n = m_context->scenesCount(); i < n; i++) {
+        const Scene scene = m_context->scene(i);
+        const QVector<int> toRetrieveNodes = scene.rootNodeIndices;
+
+        for (int j = 0, m = toRetrieveNodes.size(); j < m; ++j) {
+            const TreeNode node = m_treeNodes[toRetrieveNodes.at(j)];
+            if (node.entity != nullptr)
+                node.entity->moveToThread(targetThread);
+            for (auto &joint : node.joints)
+                if (joint != nullptr)
+                    joint->moveToThread(targetThread);
+        }
+    }
+}
+
+void GLTF2Parser::setContext(GLTF2Context *ctx)
+{
+    m_context = ctx;
+}
+
+const GLTF2Context *GLTF2Parser::context() const
+{
+    return m_context;
+}
+
+Qt3DCore::QEntity *GLTF2Parser::setupScene()
+{
     // Note: we only add resources into the collection after having set an
     // existing parent on the scene root This avoid sending a destroy + created
     // changes because sceneEntity exists and has a backend while the scene root
     // has no backend
+
     Qt3DCore::QEntity *gltfSceneEntity = scene(m_defaultSceneIdx);
-
     if (m_sceneEntity) {
-
         if (m_sceneEntity->meshes()) {
             addAssetsIntoCollection<Mesh>(
                     [this](const Mesh &mesh, int) {
@@ -474,16 +527,6 @@ Qt3DCore::QEntity *GLTF2Parser::parse(const QByteArray &jsonData, const QString 
                     [this](const Skin &, int i) { addToCollectionWithUniqueName(m_sceneEntity->skeletons(), QStringLiteral("KuesaSkeleton_%1").arg(i), m_skeletons.at(i)); });
     }
     return gltfSceneEntity;
-}
-
-void GLTF2Parser::setContext(GLTF2Context *ctx)
-{
-    m_context = ctx;
-}
-
-const GLTF2Context *GLTF2Parser::context() const
-{
-    return m_context;
 }
 
 void GLTF2Parser::buildEntitiesAndJointsGraph()

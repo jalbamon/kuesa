@@ -220,6 +220,8 @@ GLTF2Importer::GLTF2Importer(Qt3DCore::QNode *parent)
 
 GLTF2Importer::~GLTF2Importer()
 {
+    m_parsingThread.exit(0);
+    m_parsingThread.wait();
     delete m_context;
 }
 
@@ -328,18 +330,39 @@ void GLTF2Importer::load()
 
     const QString path = urlToLocalFileOrQrc(m_source);
 
-    GLTF2Import::GLTF2Parser parser(m_sceneEntity, m_assignNames);
-    parser.setContext(m_context);
+    auto parser = new GLTF2Import::GLTF2Parser(m_sceneEntity, m_assignNames);
+    parser->setContext(m_context);
+    parser->moveToThread(&m_parsingThread);
+    m_parsingThread.start();
+
+    connect(parser, &GLTF2Import::GLTF2Parser::parsingFinished,
+            this, [this, parser](Qt3DCore::QEntity *) {
+                parser->moveToThread(this->thread());
+            },
+            Qt::DirectConnection);
+
+    connect(parser, &GLTF2Import::GLTF2Parser::parsingFinished,
+            this, [this, parser](Qt3DCore::QEntity *) {
+                m_root = parser->setupScene();
+
+                if (m_root) {
+                    m_root->setParent((QNode *)nullptr);
+
+                    m_root->moveToThread(this->thread());
+                    m_root->setParent(this);
+                    if (m_sceneEntity)
+                        emit m_sceneEntity->loadingDone();
+                    setStatus(GLTF2Importer::Status::Ready);
+                } else {
+                    setStatus(GLTF2Importer::Status::Error);
+                }
+
+                parser->deleteLater();
+            },
+            Qt::QueuedConnection);
 
     Q_ASSERT(m_root == nullptr);
-    m_root = parser.parse(path);
-    if (m_root) {
-        m_root->setParent(this);
-        if (m_sceneEntity)
-            emit m_sceneEntity->loadingDone();
-    }
-
-    setStatus(m_root ? GLTF2Importer::Status::Ready : GLTF2Importer::Status::Error);
+    QMetaObject::invokeMethod(parser, "parse", Qt::QueuedConnection, QGenericReturnArgument{}, Q_ARG(QString, path));
 }
 
 void GLTF2Importer::clear()
