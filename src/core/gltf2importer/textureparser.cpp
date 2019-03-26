@@ -121,8 +121,10 @@ bool TextureParser::parse(const QJsonArray &texturesArray, GLTF2Context *context
         }
 
         const auto image = context->image(sourceValue.toInt());
-        if (image.url.isEmpty() && image.data.isEmpty())
+        if (image.url.isEmpty() && image.data.isEmpty()) {
+            qCWarning(kuesa) << "Invalid image source index for texture:" << sourceValue.toInt();
             return false; // Not a valid image
+        }
 
         auto texture2d = std::unique_ptr<Qt3DRender::QAbstractTexture>(nullptr);
         if (isDDSTexture) {
@@ -137,7 +139,7 @@ bool TextureParser::parse(const QJsonArray &texturesArray, GLTF2Context *context
             }
         } else {
             texture2d.reset(new Qt3DRender::QTexture2D);
-            auto *textureImage = sharedImages.value(image.url);
+            auto *textureImage = image.url.isEmpty() ? nullptr : sharedImages.value(image.url);
 
             if (textureImage == nullptr) {
                 if (image.data.isEmpty()) {
@@ -148,7 +150,10 @@ bool TextureParser::parse(const QJsonArray &texturesArray, GLTF2Context *context
                     sharedImages.insert(image.url, textureImage);
                 } else {
                     QImage qimage;
-                    qimage.loadFromData(image.data);
+                    if (!qimage.loadFromData(image.data)) {
+                        qCWarning(kuesa) << "Failed to decode image " << sourceValue.toInt() << "from buffer";
+                        return false;
+                    }
                     textureImage = new EmbeddedTextureImage(qimage);
                     sharedImages.insert(image.url, textureImage);
                 }

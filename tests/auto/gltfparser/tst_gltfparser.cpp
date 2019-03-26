@@ -75,6 +75,21 @@ class tst_GLTFParser : public QObject
 
 private Q_SLOTS:
 
+    void checkGLBParsing()
+    {
+        // GIVEN
+        GLTF2Context ctx;
+        GLTF2Parser parser;
+
+        parser.setContext(&ctx);
+
+        // WHEN
+        Qt3DCore::QEntity *res = parser.parse(QString(ASSETS + QLatin1String("Box.glb")));
+
+        // THEN
+        QVERIFY(res != nullptr);
+    }
+
     void checkContextUriHandling_data()
     {
         QTest::addColumn<QString>("uri");
